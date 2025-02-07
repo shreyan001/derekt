@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# config folder
+/config/cdpapi.json
+
+# wallet file
+wallet.txt
