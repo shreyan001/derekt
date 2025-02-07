@@ -1,5 +1,8 @@
 'use client';
 import { useEffect, useState } from "react";
+import { initializeAgent } from '../server/graph'; // Import the initializeAgent function
+import { HumanMessage } from "@langchain/core/messages";
+
 
 declare global {
   interface Window {
@@ -12,6 +15,10 @@ declare global {
 export default function Home() {
   const [userInfo, setUserInfo] = useState<any>(null);
   const [tg, setTg] = useState<any>(null);
+  const [agent, setAgent] = useState<any>(null);
+  const [config, setConfig] = useState<any>(null);
+  const [chatInput, setChatInput] = useState<string>('');
+  const [chatOutput, setChatOutput] = useState<string>('');
 
   useEffect(() => {
     const initTelegramApp = () => {
@@ -34,31 +41,38 @@ export default function Home() {
       }
     };
 
-    // Add event listener for when Telegram script is loaded
+    // Initialize the agent
+    const initAgent = async () => {
+      const { agent, config } = await initializeAgent();
+      setAgent(agent);
+      setConfig(config);
+    };
+
     if (document.readyState === 'complete') {
       initTelegramApp();
+      initAgent();
     } else {
-      window.addEventListener('load', initTelegramApp);
+      window.addEventListener('load', () => {
+        initTelegramApp();
+        initAgent();
+      });
       return () => window.removeEventListener('load', initTelegramApp);
     }
   }, []);
 
-  const handleSendData = () => {
-    if (!tg) return;
-    tg.sendData(JSON.stringify({
-      action: 'test_action',
-      data: 'Test data from web app'
-    }));
-  };
+  const handleChatSubmit = async () => {
+    if (!agent || !config || !chatInput) return;
+    const stream = await agent.stream({ messages: [new HumanMessage(chatInput)] }, config);
 
-  const handleShowAlert = () => {
-    if (!tg) return;
-    tg.showAlert('This is a test alert from Web App!');
-  };
-
-  const handleClose = () => {
-    if (!tg) return;
-    tg.close();
+    let output = '';
+    for await (const chunk of stream) {
+      if ("agent" in chunk) {
+        output += chunk.agent.messages[0].content + '\n';
+      } else if ("tools" in chunk) {
+        output += chunk.tools.messages[0].content + '\n';
+      }
+    }
+    setChatOutput(output);
   };
 
   return (
@@ -73,26 +87,22 @@ export default function Home() {
       )}
 
       <div className="flex flex-col gap-4 w-full max-w-xs">
+        <input
+          type="text"
+          value={chatInput}
+          onChange={(e) => setChatInput(e.target.value)}
+          placeholder="Type your message"
+          className="border rounded-lg py-2 px-4"
+        />
         <button
-          onClick={handleSendData}
+          onClick={handleChatSubmit}
           className="bg-[#2ea6ff] text-white rounded-lg py-2 px-4 hover:bg-[#2896e0]"
         >
-          Send Data to Bot
+          Send Message
         </button>
-
-        <button
-          onClick={handleShowAlert}
-          className="bg-[#2ea6ff] text-white rounded-lg py-2 px-4 hover:bg-[#2896e0]"
-        >
-          Show Alert
-        </button>
-
-        <button
-          onClick={handleClose}
-          className="bg-[#2ea6ff] text-white rounded-lg py-2 px-4 hover:bg-[#2896e0]"
-        >
-          Close WebApp
-        </button>
+        <div className="mt-4 p-4 border rounded-lg">
+          <p>{chatOutput}</p>
+        </div>
       </div>
     </main>
   );
